@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<!--
+d3.geo.tile:  http://bl.ocks.org/mbostock/4132797
+-->
+<head>
+<meta charset="utf-8">
+<title>geotile dynamic simplification using canvas</title>
+</head>
+<style>
+
+body {
+  margin: 0;
+}
+svg {
+  position:absolute;
+}
+.map {
+  position: relative;
+  overflow: hidden;
+}
+
+.layer {
+  position: absolute;
+}
+
+.tile {
+  pointer-events: none;
+  position: absolute;
+  width: 	256px;
+  height: 	256px;
+}
+
+.info {
+  position: absolute;
+  bottom: 	10px;
+  left: 	10px;
+}
+
+.zinfo {
+  position: absolute;
+  bottom: 	10px;
+  left: 	200px;
+}
+
+.outline {
+	position: absolute;
+	fill: none;
+	stroke: green;
+	stroke-linejoin: round;
+	stroke-width: 2px;
+}
+
+.flood_vectors {
+	position: absolute;
+	-webkit-tap-highlight-color: rgba(0,0,0,0);
+}
+
+</style>
+
+<body>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://d3js.org/d3.geo.tile.v0.min.js"></script>
+<script src="http://d3js.org/topojson.v1.min.js"></script>
+
+<script>
+
+var width 			= Math.max(500, window.innerWidth),
+	height 			= Math.max(500, window.innerHeight),
+	prefix 			= prefixMatch(["webkit", "ms", "Moz", "O"]),
+	target			= [-72.67, 19.34]
+	minExtent		= 15,
+	maxExtent 		= 28,
+	outline_geojson = 	{
+		"type": "FeatureCollection",
+		"features": [
+			{
+				"type": "Feature",
+	           "geometry": {
+					"type": 		"Polygon",
+					"coordinates": [
+						[ 
+						 	[-72.7612560, 19.0783620],
+							[-72.7612560, 19.3898340],
+							[-72.5917140, 19.3898340],
+							[-72.5917140, 19.0783620],
+							[-72.7612560, 19.0783620]
+						]
+					]
+				}
+			}
+		]
+	};
+	
+var scale,
+    translate,
+    visibleArea,	// minimum area threshold for simplification
+    invisibleArea; 	// minimum area threshold for points outside viewport
+
+var clip = d3.geo.clipExtent()
+    .extent([[0, 0], [width, height]]);
+	
+var simplify = d3.geo.transform({
+  point: function(x, y, z) {
+	
+    if (z >= visibleArea) {
+		var point = projection([x,y])
+		x = point[0]
+		y = point[1]
+		if (x >= 0 && x <= width && y >= 0 && y <= height || z >= invisibleArea) {
+			console.log(x,y)
+			this.stream.point(x, y);
+		}
+	}
+  }
+});
+
+var tile = d3.geo.tile()
+	.size([width, height]);
+
+var projection = d3.geo.mercator() 
+	.scale((1 << 19) / 2 / Math.PI)
+	.translate([width / 2, height / 2]);
+
+var center 	= projection(target);
+
+var zoom 	= d3.behavior.zoom()
+	.scale(projection.scale() * 2 * Math.PI)
+	.scaleExtent([1 << minExtent, 1 << maxExtent])
+	.translate([width - center[0], height - center[1]])
+	.on("zoom", zoomed);
+
+var map = d3.select("body").append("div")
+    .attr("class", "map")
+    .style("width", width + "px")
+    .style("height", height + "px")
+    .call(zoom)
+    .on("mousemove", mousemoved);
+
+var layer = map.append("div")
+    .attr("class", "layer");
+
+var info = map.append("div")
+    .attr("class", "info");
+
+var zinfo = map.append("div")
+	.attr("class", "zinfo");
+
+var canvas 	= 	map.append("canvas")
+	.attr("class", "flood_vectors")
+	.attr("width", width)
+	.attr("height", height);
+
+var context = canvas.node().getContext("2d");
+var path	=  d3.geo.path()
+	.projection(projection)
+//	.projection(simplify2);
+//	.projection( {stream: function(s) { return simplify.stream(clip.stream(s));}})
+	.context(context);
+    			
+	//var filename 	= "Haiti_RWD_binary_water_0.012.tif.hand.png.pgm.DP0.10.topojson"
+	//var filename 	= "Haiti_RWD_binary_water_0.012.tif.hand.png.pgm.DP0.10.topojson"
+	//var filename 	= "Haiti_RWD_binary_water_0.012.tif.hand.png.pgm.V0.05.topojson"
+	var filename 	= "Haiti_RWD_binary_water_0.012.tif.hand.png.pgm.sp.0.10.topojson"
+
+d3.json(filename, function(error, topology) {
+	canvas
+		//.data( topojson.feature(topojson.presimplify(topology), topology.objects.surface_water).features)
+		.datum( topojson.feature(topology, topology.objects.surface_water))
+	zoomed();
+})	
+
+function zoomed() {
+	translate 		= zoom.translate();
+	scale 			= zoom.scale();
+	visibleArea 	= 1 / scale / scale;	
+	invisibleArea 	= 200 * visibleArea;
+	
+	var tiles = tile
+		.scale(scale)
+		.translate(translate)
+		();
+
+	projection
+		.scale(scale / 2 / Math.PI)
+		.translate(translate);
+	
+	var image = layer
+		.style(prefix + "transform", matrix3d(tiles.scale, tiles.translate))
+		.selectAll(".tile")
+		.data(tiles, function(d) { return d; });
+
+	image.exit()
+		.remove();
+
+	image.enter().append("img")
+		.attr("class", "tile")
+		.attr("src", function(d) { 
+			zinfo.text(d[2]);
+			var partial_url = ".tiles.mapbox.com/v3/examples.map-vyofok3q/" + d[2] + "/" + d[0] + "/" + d[1] + ".png";
+			return "http://" + ["a", "b", "c", "d"][Math.random() * 4 | 0] + partial_url; 
+		})
+		.style("left", function(d) { return (d[0] << 8) + "px"; })
+		.style("top", function(d) { return (d[1] << 8) + "px"; });
+		
+/*	outline_vector
+		.attr("d", path);
+*/	
+
+	context.clearRect(0, 0, width, height);
+	context.beginPath();
+	canvas.each(path);
+	context.fillStyle = '#FF0000';
+	context.fill();	
+}
+
+function mousemoved() {
+	info.text(formatLocation(projection.invert(d3.mouse(this)), zoom.scale()));
+}
+
+function matrix3d(scale, translate) {
+  var k = scale / 256, r = scale % 1 ? Number : Math.round;
+  return "matrix3d(" + [k, 0, 0, 0, 0, k, 0, 0, 0, 0, k, 0, r(translate[0] * scale), r(translate[1] * scale), 0, 1 ] + ")";
+}
+
+function prefixMatch(p) {
+  var i = -1, n = p.length, s = document.body.style;
+  while (++i < n) if (p[i] + "Transform" in s) return "-" + p[i].toLowerCase() + "-";
+  return "";
+}
+
+function formatLocation(p, k) {
+  var format = d3.format("." + Math.floor(Math.log(k) / 2 - 2) + "f");
+  return (p[1] < 0 ? format(-p[1]) + "°S" : format(p[1]) + "°N") + " "
+       + (p[0] < 0 ? format(-p[0]) + "°W" : format(p[0]) + "°E");
+}
+
+</script>

@@ -1,0 +1,234 @@
+<!DOCTYPE html >
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' />
+  <!-- 
+	<script src="http://d3js.org/d3.v3.min.js"></script>
+  	<script src="http://d3js.org/topojson.v1.min.js"></script>
+  -->
+  <script src='http://api.tiles.mapbox.com/mapbox.js/v1.3.1/mapbox.js'></script>
+  <script src="http://code.jquery.com/jquery.js"></script>
+  <script src="/js/moment.min.js"></script>
+  <script type='text/javascript' src='https://cdn.firebase.com/v0/firebase.js'></script>
+
+  <link href='http://api.tiles.mapbox.com/mapbox.js/v1.3.1/mapbox.css' rel='stylesheet' />
+  <link href="css/bootstrap.min.css" rel="stylesheet" media="screen">
+  <title>CHAI 640 IPM Demo</title>
+  <style>
+    body { margin:10; padding:0; }
+    #map { 	position:relative; 
+			top:0; bottom:0; width:750px; height:600px; overflow: hidden;
+  		}
+	#telemetry { position:absolute; bottom:320px; left:20px  }
+  </style>
+</head>
+
+<body>
+	<table>
+		<tr><td>
+				<div id='map'></div>
+			</td>
+		</tr>
+	</table>
+	
+	<div id='location'></div>
+	
+	<div id='telemetry'>
+		<table id='table'>
+			<tr><td><b>Timestamp:</b></td><td><div id='timestamp'></div></td></tr>
+			<tr><td><b>Latitude:</b></td><td><div id='lat'>34</div></td></tr>
+			<tr><td><b>Longitude:</b></td><td><div id='lon'>-72</div></td></tr>
+			<tr><td><b>Altitude (m):</b></td><td><div id='alt'>3000</div></td></tr>
+			<tr><td><b>Pitch:</b></td><td><div id='pitch'>27</div></td></tr>
+			<tr><td><b>Roll:</b></td><td><div id='roll'>27</div></td></tr>
+			<tr><td><b>Heading :</b></td><td><div id='heading'>27</div></td></tr>
+			<tr><td><b>Instrument:</b></td><td><div id='instrument'>on</div></td></tr>
+		</table>
+	</div>
+	<br/>
+	<div class='container-fluid'>
+		<div class='span9'>
+			<a class='btn btn-success' id='sim' onclick="DoSim();">Start Sim</a>&nbsp;
+			<a class='btn btn-success' id='imager' onclick="DoImager();">Start Imager</a>&nbsp;
+			<a class='btn btn-success' id='process' onclick="DoProcess();">Execute</a>&nbsp;
+			<select id='algorithm'>
+				<option value='vis_composite' selected >vis_composite</option>
+				<option value='vnir_composite'>vnir_composite</option>
+				<option value='vswir_composite'>vswir_composite</option>
+				<option value='water_extent'>water_extent</option>
+				<option value='red_surface_water'>red_surface_water</option>
+				<option value='sam_algae'>sam_algae</option>
+			</select>
+			<a class='btn btn-success' id='upload' onclick="DoUpload();">Upload Algorithm</a>&nbsp;
+			<div id='upload_form' style='display:none'>
+				<form action="/upload" method="post" enctype="multipart/form-data">
+				    <input type="file" name="upload_file">
+					<input type="submit" value="Upload">
+				</form>
+			</div>
+			<br/>
+			<br/>
+			<div class='well'>
+				<table>
+					<tr><td><b>Last Command:</b></td><td><span id='last_cmd'></span></td></tr>
+					<tr><td><b>Last Download:</b></td><td><span id='last_dowload'></span></td></tr>
+					<tr><td><b>Last Upload:</b></td><td><span id='last_upload'></span></td></tr>
+				</table>
+			</div>
+		</div>
+	</div>
+	<br/>
+	<br/>
+
+<script>
+var sim 	= false;
+var imager	= false;
+
+var map = L.map('map')
+    .setView([38.3964, -76.4975], 12);
+	
+	var helo_icon = L.icon({
+	    iconUrl: "http://localhost:7464/img/helicopter.png",
+	    iconSize: [32, 32],
+	    iconAnchor: [16, 16],
+	    popupAnchor: [-3, -16]
+	});
+
+var	helo_marker = L.marker([-76.51053835470171,38.4581113209096], {
+			icon: helo_icon
+		});
+
+var marker = L.marker(new L.LatLng(38.3964, -76.4975), {
+            icon: L.mapbox.marker.icon({'marker-color': 'CC0033'}),
+            draggable: true
+    });
+
+	marker.bindPopup('This target is draggable! Move it around.');
+	marker.addTo(map);
+		
+	L.control.layers({
+	    'Terrain Map': L.mapbox.tileLayer('cappelaere.map-1d8e1acq').addTo(map),
+	    'Grey Map': L.mapbox.tileLayer('examples.map-20v6611k')
+	}, {
+		
+	}).addTo(map);	
+	
+	helo_marker.addTo(map);	
+	
+	map.on('mousemove', function(e) {
+	    $('#location').html("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Lat: " + e.latlng.lat.toFixed(4) +", Lon: "+e.latlng.lng.toFixed(4));
+	});
+	
+function DoSim() {
+	sim = !sim;
+	if( !sim ) {
+		$.getJSON( "/cmds/sim_off", function( data ) {
+			console.log('sim off', data);
+			$('#sim').html("Start Sim");
+		})
+
+	} else {
+		$.getJSON( "/cmds/sim_on", function( data ) {
+			console.log('sim on', data);
+			$('#sim').html("Stop Sim");	
+		})
+	}
+}
+
+function DoImager() {
+	imager = !imager;
+	if( !imager ) {
+		$.getJSON( "/cmds/instrument_off", function( data ) {
+			console.log('instrument_off', data);
+			$('#imager').html("Start Imager");
+		})
+	} else {
+		$.getJSON( "/cmds/instrument_on", function( data ) {
+			console.log('instrument_on', data);
+			$('#imager').html("Stop Imager");
+		})
+	}
+}
+
+
+//
+// Telemetry Event
+//
+var tlm = new Firebase("https://ipm.firebaseIO.com/tlm");
+tlm.on('child_added', function(snapshot) {
+	var data = snapshot.val();
+	var timestamp = moment(data.timestamp);
+	$('#timestamp').html( timestamp.format("YYYY-MM-DD HH:mm:ss") );
+	$('#lat').html( data.lat.toFixed(4));
+	$('#lon').html( data.lon.toFixed(4));
+	$('#alt').html( data.alt.toFixed(1));
+	if( data.pitch ) $('#pitch').html( data.pitch.toFixed(2));
+	if( data.roll ) $('#roll').html( data.roll.toFixed(2));
+	if( data.heading ) $('#heading').html( data.heading.toFixed(2));
+	$('#instrument').html( data.instrument);
+	
+	helo_marker.setLatLng(L.latLng(data.lat, data.lon));
+});
+
+//
+// Command Event
+//
+var cmds = new Firebase("https://ipm.firebaseIO.com/cmds");
+cmds.on('child_added', function(snapshot) {
+	var data = snapshot.val();
+	var timestamp = moment(data.timestamp);
+	$('#last_cmd').html( timestamp.format("YYYY-MM-DD HH:mm:ss") + " - " + data.cmd);
+});
+
+//
+// Send execute algorithm command
+//
+function DoProcess() {
+	console.log( "DoProcess" );
+	var algoritm = $('#algorithm option:selected').val();
+
+	var str = "execute " + algorithm.value;
+	
+	var cmd = { 	timestamp: new Date().getTime(),
+					cmd: str 
+				};
+	console.log( JSON.stringify(cmd) );
+	var newPushRef 	= cmds.push();
+	newPushRef.set( cmd )			
+}
+
+//
+// Upload algorithm
+//
+function DoUpload() {
+	$('#upload_form').toggle();
+}
+
+//
+// Download Event
+//
+var downloads = new Firebase("https://ipm.firebaseIO.com/downloads");
+downloads.on('child_added', function(snapshot) {
+	var data = snapshot.val();
+	var timestamp = moment(data.timestamp);
+	var str = "<a href='"+data.url+"'>"+data.scene+"</a>"
+	$('#last_download').html( timestamp.format("YYYY-MM-DD HH:mm:ss") + " - " + str);
+});
+
+
+//
+// Upload Event
+//
+var uploads = new Firebase("https://ipm.firebaseIO.com/uploads");
+uploads.on('child_added', function(snapshot) {
+	var data = snapshot.val();
+	var timestamp = moment(data.timestamp);
+	var str = "filename: "+data.filename + ", size: " + data.size + " bytes";
+	$('#last_upload').html( timestamp.format("YYYY-MM-DD HH:mm:ss") + " - " + str);
+});
+</script>
+
+</body>
+</html>
+

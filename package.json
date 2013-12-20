@@ -1,0 +1,35 @@
+{
+    "name": "chai", 
+	"description": "Chai GUI for IPM Demo",
+	"version": "0.1.0", 
+ 	"private": false,
+    "author": {
+        "name": "Patrice G. Cappelaere", 
+        "email": "pat@cappelaere.com"
+    },
+
+	"dependencies": {
+		"consolidate": "0.9.1",
+		"debug": "0.7.2",
+		"ejs": "0.8.3",
+		"express": "3.1.0",
+		"eyes": "0.1.8",
+		"firebase": "0.6.3",
+		"moment": "2.0.0",
+		"multipart": "0.1.5",
+		"posix": "1.0.2"
+	},
+	"maintainers": [
+		"Pat Cappelaere <pat@cappelaere.com>"
+	],
+	"repository": {
+		"type": "git",
+		"url": "http://github.com/cappelaere/chai.git"
+	},
+    "scripts": {
+        "start": "node server.js"
+    }, 
+ 	"engines": {
+    	"node": ">= 0.8.6"
+  	}
+}

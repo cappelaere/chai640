@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<!--
+d3.geo.tile:  http://bl.ocks.org/mbostock/4132797
+-->
+<head>
+<meta charset="utf-8">
+<title>geotile</title>
+</head>
+<style>
+
+body {
+  margin: 0;
+}
+svg {
+  position:absolute;
+}
+.map {
+  position: relative;
+  overflow: hidden;
+}
+
+.layer {
+  position: absolute;
+}
+
+.tile {
+  pointer-events: none;
+  position: absolute;
+  width: 	256px;
+  height: 	256px;
+}
+
+.info {
+  position: absolute;
+  bottom: 	10px;
+  left: 	10px;
+}
+
+.zinfo {
+  position: absolute;
+  bottom: 	10px;
+  left: 	200px;
+}
+
+.outline {
+	position: absolute;
+	fill: none;
+	stroke: green;
+	stroke-linejoin: round;
+	stroke-width: 2px;
+}
+
+.surface_water {
+	position: absolute;
+	fill: red;
+	stroke: red;
+	stroke-linejoin: round;
+	stroke-width: 1px;
+}
+</style>
+
+<body>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://d3js.org/d3.geo.tile.v0.min.js"></script>
+<script src="http://d3js.org/topojson.v1.min.js"></script>
+
+<script>
+
+var width 			= Math.max(500, window.innerWidth),
+	height 			= Math.max(500, window.innerHeight),
+	prefix 			= prefixMatch(["webkit", "ms", "Moz", "O"]),
+	target			= [-72.67, 19.34]
+	minExtent		= 15,
+	maxExtent 		= 28,
+	outline_geojson = 	{
+		"type": "FeatureCollection",
+		"features": [
+			{
+				"type": "Feature",
+	           "geometry": {
+					"type": 		"Polygon",
+					"coordinates": [
+						[ 
+						 	[-72.7612560, 19.0783620],
+							[-72.7612560, 19.3898340],
+							[-72.5917140, 19.3898340],
+							[-72.5917140, 19.0783620],
+							[-72.7612560, 19.0783620]
+						]
+					]
+				}
+			}
+		]
+	};
+	
+var scale,
+    translate,
+    area; 			// minimum area threshold for simplification
+
+var clip = d3.geo.clipExtent()
+    .extent([[0, 0], [width, height]]);
+
+var simplify = d3.geo.transform({
+	  point: function(x, y, z) {
+	    if (z >= area) this.stream.point(x * scale + translate[0], y * scale + translate[1]);
+	  }
+});
+
+var tile = d3.geo.tile()
+	.size([width, height]);
+
+var projection = d3.geo.mercator() 
+	.scale((1 << 19) / 2 / Math.PI)
+	.translate([width / 2, height / 2]);
+//	.precision(0)
+
+var center 	= projection(target);
+
+var path 	= d3.geo.path()
+    .projection(projection);
+
+var zoom 	= d3.behavior.zoom()
+	.scale(projection.scale() * 2 * Math.PI)
+	.scaleExtent([1 << minExtent, 1 << maxExtent])
+	.translate([width - center[0], height - center[1]])
+	.on("zoom", zoomed);
+
+var map = d3.select("body").append("div")
+    .attr("class", "map")
+    .style("width", width + "px")
+    .style("height", height + "px")
+    .call(zoom)
+    .on("mousemove", mousemoved);
+
+var layer = map.append("div")
+    .attr("class", "layer");
+
+var info = map.append("div")
+    .attr("class", "info");
+
+var zinfo = map.append("div")
+	.attr("class", "zinfo");
+
+var svg = map.append("svg")
+	.attr("width", width)
+	.attr("height", height)
+	
+var outline_vector = svg.append("path")
+	.attr("class", "outline")
+	.datum( outline_geojson )
+	.attr("d", path)
+
+//var flood_canvas 	= 	d3.select("body").append("canvas")
+//	.attr("width", width)
+//	.attr("height", height);
+
+var flood_canvas	= svg.append("g")	
+
+//var flood_context	= flood_canvas.node().getContext("2d")
+//var flood_path 		= d3.geo.path()
+//  .projection({stream: function(s) { return simplify.stream(clip.stream(s)); }})
+//  .context(flood_context);
+var flood_path 	= d3.geo.path()
+    .projection(projection);
+
+var filename 	= "file:///Volumes/PCBay2/shared/production/proddata/wv2/Haiti_RWD_binary_water_0.012.tif.hand.png.pgm901.topojson"
+
+d3.json(filename, function(error, topology) {
+	flood_canvas.selectAll("path")
+	 	.data( topojson.feature(topology, topology.objects.surface_water).features)
+		.enter()
+		.append("path")
+		.attr("class", "surface_water")
+		.attr("d", flood_path)
+});
+	
+zoomed();
+
+function zoomed() {
+	var tiles = tile
+		.scale(zoom.scale())
+		.translate(zoom.translate())
+		();
+
+	projection
+		.scale(zoom.scale() / 2 / Math.PI)
+		.translate(zoom.translate());
+
+	var image = layer
+		.style(prefix + "transform", matrix3d(tiles.scale, tiles.translate))
+		.selectAll(".tile")
+		.data(tiles, function(d) { return d; });
+			
+	image.exit()
+		.remove();
+
+	image.enter().append("img")
+		.attr("class", "tile")
+		.attr("src", function(d) { 
+			//console.log("d[2]:"+d[2])
+			zinfo.text(d[2]);
+			
+			return "http://" + ["a", "b", "c", "d"][Math.random() * 4 | 0] + ".tiles.mapbox.com/v3/examples.map-vyofok3q/" + d[2] + "/" + d[0] + "/" + d[1] + ".png"; })
+		.style("left", function(d) { return (d[0] << 8) + "px"; })
+		.style("top", function(d) { return (d[1] << 8) + "px"; });
+		
+	outline_vector
+		.attr("d", path);
+		
+	//flood_canvas
+	//	.attr("d", flood_path);
+	flood_canvas.selectAll("path") 
+		.attr("d", flood_path.projection(projection)); 
+	
+	// console.log("Zoomed:", d);
+	
+	//translate 	= zoom.translate();
+	//scale 		= zoom.scale();
+	//area 		= 1 / scale / scale;
+	//flood_context.clearRect(0, 0, width, height);
+	//flood_context.beginPath();
+	//flood_path(d);
+	//flood_context.fill();
+		
+	//var t	 	= projection.translate(),
+	//	s		= projection.scale(),
+	//	z		= Math.max(Math.log(s)/Math.log(2)-8,0),
+	//	rz		= Math.floor(z),
+	//	ts		= 256 * Math.pow(2, z-rz);		
+	//console.log("t:"+t, " s:"+s, " z:"+z, " rz:"+rz)
+	
+}
+
+function mousemoved() {
+	info.text(formatLocation(projection.invert(d3.mouse(this)), zoom.scale()));
+}
+
+function matrix3d(scale, translate) {
+  var k = scale / 256, r = scale % 1 ? Number : Math.round;
+  return "matrix3d(" + [k, 0, 0, 0, 0, k, 0, 0, 0, 0, k, 0, r(translate[0] * scale), r(translate[1] * scale), 0, 1 ] + ")";
+}
+
+function prefixMatch(p) {
+  var i = -1, n = p.length, s = document.body.style;
+  while (++i < n) if (p[i] + "Transform" in s) return "-" + p[i].toLowerCase() + "-";
+  return "";
+}
+
+function formatLocation(p, k) {
+  var format = d3.format("." + Math.floor(Math.log(k) / 2 - 2) + "f");
+  return (p[1] < 0 ? format(-p[1]) + "°S" : format(p[1]) + "°N") + " "
+       + (p[0] < 0 ? format(-p[0]) + "°W" : format(p[0]) + "°E");
+}
+
+</script>

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<!--
+d3.geo.tile:  http://bl.ocks.org/mbostock/4132797
+-->
+<head>
+<meta charset="utf-8">
+<title>geotile dyn svg</title>
+</head>
+<style>
+
+body {
+  margin: 0;
+}
+svg {
+  position:absolute;
+}
+.map {
+  position: relative;
+  overflow: hidden;
+}
+
+.layer {
+  position: absolute;
+}
+
+.tile {
+  pointer-events: none;
+  position: absolute;
+  width: 	256px;
+  height: 	256px;
+}
+
+.info {
+  position: absolute;
+  bottom: 	10px;
+  left: 	10px;
+}
+
+.zinfo {
+  position: absolute;
+  bottom: 	10px;
+  left: 	200px;
+}
+
+.outline {
+	position: absolute;
+	fill: none;
+	stroke: green;
+	stroke-linejoin: round;
+	stroke-width: 2px;
+}
+
+.surface_water {
+	position: absolute;
+	fill: red;
+	stroke: red;
+	stroke-linejoin: round;
+	stroke-width: 1px;
+}
+</style>
+
+<body>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://d3js.org/d3.geo.tile.v0.min.js"></script>
+<script src="http://d3js.org/topojson.v1.min.js"></script>
+
+<script>
+
+var width 			= Math.max(500, window.innerWidth),
+	height 			= Math.max(500, window.innerHeight),
+	prefix 			= prefixMatch(["webkit", "ms", "Moz", "O"]),
+	centerlng		= (-72.7612560-72.7612560)/2,
+	centerlat		= (19.0783620+19.3898340)/2,
+	target			= [centerlng, centerlat],
+	minExtent		= 15,
+	maxExtent 		= 28,
+	outline_geojson = 	{
+		"type": "FeatureCollection",
+		"features": [
+			{
+				"type": "Feature",
+	           "geometry": {
+					"type": 		"Polygon",
+					"coordinates": [
+						[ 
+						 	[-72.7612560, 19.0783620],
+							[-72.7612560, 19.3898340],
+							[-72.5917140, 19.3898340],
+							[-72.5917140, 19.0783620],
+							[-72.7612560, 19.0783620]
+						]
+					]
+				}
+			}
+		]
+	};
+	
+console.log(centerlng, centerlat)
+
+var scale,
+	initial_scale,
+    translate,
+    visibleArea,	// minimum area threshold for simplification
+    invisibleArea; 	// minimum area threshold for points outside viewport
+
+var clip = d3.geo.clipExtent()
+    .extent([[0, 0], [width, height]]);
+
+var simplify = d3.geo.transform({
+	  point: function(x, y, z) {
+		//console.log("simplify:", x, y, z)
+	    //if (z >= visibleArea) {
+			var point = projection([x,y])
+			x = parseInt(point[0])
+			y = parseInt(point[1])
+			//x = point[0]
+			//y = point[1]
+			//if (x >= 0 && x <= width && y >= 0 && y <= height || z >= invisibleArea) {
+				if (x >= 0 && x <= width && y >= 0 && y <= height ) {
+				this.stream.point(x, y);
+			}
+		//}
+	  }
+});
+
+var tile = d3.geo.tile()
+	.size([width, height]);
+
+var projection = d3.geo.mercator() 
+//	.scale((1 << 19) / 2 / Math.PI)
+//	.translate([width / 2, height / 2]);
+
+var center 	= projection(target);
+console.log("center:"+center);
+
+var path 	= d3.geo.path()
+    			.projection(projection);
+//				.projection( simplify )
+//				.projection( {stream: function(s) { return simplify.stream(clip.stream(s));}})
+
+var zoom 	= d3.behavior.zoom()
+//	.scale(projection.scale() * 2 * Math.PI)
+	.scale(1<<19)
+	.scaleExtent([1 << minExtent, 1 << maxExtent])
+	.translate([width - center[0], height - center[1]])
+	.on("zoom", zoomed);
+
+// With the center computed, now adjust the projection such that
+// it uses the zoom behavior’s translate and scale.
+//projection
+//    .scale(1 / 2 / Math.PI)
+//    .translate([0, 0]);
+
+var map = d3.select("body").append("div")
+    .attr("class", "map")
+    .style("width", width + "px")
+    .style("height", height + "px")
+    .call(zoom)
+    .on("mousemove", mousemoved);
+
+var layer = map.append("div")
+    .attr("class", "layer");
+
+var svg = map.append("svg")
+	.attr("width", width)
+	.attr("height", height)
+
+var raster = svg.append("g")
+	.attr("id", "tiles");
+
+var info = map.append("div")
+    .attr("class", "info");
+
+var zinfo = map.append("div")
+	.attr("class", "zinfo");
+
+var initial_scale 		= zoom.scale() / 2 / Math.PI
+translate				= zoom.translate()
+var initial_translate 	= [translate[0]-width/2, translate[1]-height/2]
+var transform 			= "translate("+ zoom.translate() +") scale("+zoom.scale()+")"
+
+console.log("initial "+transform)
+console.log("proj.translate "+projection.translate())
+console.log("zoom.translate "+zoom.translate())
+console.log("width: ", width-center[0], height-center[1])
+
+var vectors = svg.append("g")
+	.attr("transform", transform)
+//	.call(zoom);
+
+var outline = vectors.append("path")
+	.attr("class", "outline")
+	.datum( outline_geojson )
+	.attr("d", path)
+
+var surface_water	= vectors.append("g")
+	.attr("class", "surface_water")
+					
+var filename 	= "Haiti_RWD_binary_water_0.012.tif.hand.png.pgm.sp.0.10.topojson"
+
+/*
+d3.json(filename, function(error, topology) {
+	surface_water.selectAll("path")
+ 	.data( topojson.feature(topology, topology.objects.surface_water).features)
+	.enter()
+	.append("path")
+	.attr("d", path)
+	
+	//zoomed();
+});
+*/
+//zoomed();
+
+function zoomed() {
+
+	translate 		= zoom.translate();
+	scale 			= zoom.scale();
+	var pscale		= scale / 2 / Math.PI
+	
+	var tiles = tile
+		.scale(scale)
+		.translate(translate)
+		();
+
+	projection
+		.scale(pscale)
+		.translate(translate);
+		
+	var image = raster
+//		.attr("transform", "scale(" + tiles.scale + ")translate(" + tiles.translate + ")")
+      .style(prefix + "transform", matrix3d(tiles.scale, tiles.translate))
+		.selectAll("image")
+		.data(tiles, function(d) { return d; });
+
+	image.exit()
+		.remove();
+
+	image.enter().append("image")
+      .attr("xlink:href", function(d) { return "http://" + ["a", "b", "c", "d"][Math.random() * 4 | 0] + ".tiles.mapbox.com/v3/examples.map-vyofok3q/" + d[2] + "/" + d[0] + "/" + d[1] + ".png"; })
+      .attr("width", 1)
+      .attr("height", 1)
+      .attr("x", function(d) { return d[0]; })
+      .attr("y", function(d) { return d[1]; });
+
+	if(d3.event) {
+		//var scale 		= pscale/initial_scale;
+		//var translate 	= [translate[0]-width/2, translate[1]-height/2]
+		
+		//var transform = "translate("+ translate +")"
+	//	+ " scale(" + scale +")"
+		//var transform = "translate("+ zoom.translate() +")"
+		//+ " scale(" + zoom.scale() +")"
+		
+		//console.log("vectors " + transform )
+		//vectors.attr("transform", transform )
+	}
+	
+//	outline
+//		.attr("d", path);
+//		.attr("transform", "translate(" + translate + ")scale(" + scale + ")");
+		
+//	vector
+//		.attr("transform", "translate(" + translate + ")scale(" + scale + ")");		
+//	    .style("stroke-width", 1 / zoom.scale());
+
+//	vector.selectAll("path") 
+//		.attr("d", path);
+}
+
+function mousemoved() {
+	info.text(formatLocation(projection.invert(d3.mouse(this)), zoom.scale()));
+//	info.text(formatLocation(d3.mouse(this), zoom.scale()));
+}
+
+function matrix3d(scale, translate) {
+  var k = scale / 256, r = scale % 1 ? Number : Math.round;
+  return "matrix3d(" + [k, 0, 0, 0, 0, k, 0, 0, 0, 0, k, 0, r(translate[0] * scale), r(translate[1] * scale), 0, 1 ] + ")";
+}
+
+function prefixMatch(p) {
+  var i = -1, n = p.length, s = document.body.style;
+  while (++i < n) if (p[i] + "Transform" in s) return "-" + p[i].toLowerCase() + "-";
+  return "";
+}
+
+function formatLocation(p, k) {
+  var format = d3.format("." + Math.floor(Math.log(k) / 2 - 2) + "f");
+  return (p[1] < 0 ? format(-p[1]) + "°S" : format(p[1]) + "°N") + " "
+       + (p[0] < 0 ? format(-p[0]) + "°W" : format(p[0]) + "°E");
+}
+
+</script>

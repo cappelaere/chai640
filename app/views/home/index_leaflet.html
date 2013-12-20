@@ -1,0 +1,70 @@
+<!DOCTYPE html >
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' />
+  <script src="http://d3js.org/d3.v3.min.js"></script>
+  <script src="http://d3js.org/topojson.v1.min.js"></script>
+  <script src='http://api.tiles.mapbox.com/mapbox.js/v1.3.1/mapbox.js'></script>
+  <link href='http://api.tiles.mapbox.com/mapbox.js/v1.3.1/mapbox.css' rel='stylesheet' />
+  <title>Haiti_RWD_binary_water_0.012</title>
+  <style>
+    body { margin:0; padding:0; }
+    #map { position:absolute; top:0; bottom:0; width:100%; }
+  </style>
+</head>
+
+<body>
+<div id='map'></div>
+<script>
+var map = L.map('map')
+    .setView([19.2340980,-72.6764850], 14);
+	
+	var surfaceWaterLayer 		= L.geoJson(null, { style: { color: '#ff0000', weight: 1 }})
+	var referenceWaterLayer 	= L.geoJson(null, { style: { color: '#0000ff', weight: 1 }})
+	var referenceMarshesLayer 	= L.geoJson(null, { style: { color: '#0000ff', weight: 1 }})
+	
+	var polyline_options = {
+	    color: '#0000FF'
+	};
+	
+	d3.json('Haiti_RWD_binary_water_0.012.tif.hand.png.pgm.DP0.10.topojson', function(error, data) {
+		var product = topojson.feature(data, data.objects.surface_water)
+		surfaceWaterLayer.addData(product);
+	})
+
+	d3.json('osm_layers.topojson', function(error, data) {
+		var product = topojson.feature(data, data.objects.osm_water)
+		referenceWaterLayer.addData(product);
+
+		var product = topojson.feature(data, data.objects.osm_marshes)
+		referenceMarshesLayer.addData(product);
+	})
+	
+	//Upper Left  ( -72.7612560,  19.3898340) ( 72d45'40.52"W, 19d23'23.40"N)
+	//Lower Left  ( -72.7612560,  19.0783620) ( 72d45'40.52"W, 19d 4'42.10"N)
+	//Upper Right ( -72.5917140,  19.3898340) ( 72d35'30.17"W, 19d23'23.40"N)
+	//Lower Right ( -72.5917140,  19.0783620) ( 72d35'30.17"W, 19d 4'42.10"N)
+	//Center      ( -72.6764850,  19.2340980) ( 72d40'35.35"W, 19d14' 2.75"N)
+	var line_points = [
+		[ 19.3898340, -72.7612560],
+		[ 19.3898340, -72.5917140],
+		[ 19.0783620, -72.5917140],
+		[ 19.0783620, -72.7612560],
+		[ 19.3898340, -72.7612560]		
+	]
+	
+	L.control.layers({
+	    'Terrain Map': L.mapbox.tileLayer('cappelaere.map-1d8e1acq').addTo(map),
+	    'Grey Map': L.mapbox.tileLayer('examples.map-20v6611k')
+	}, {
+	    'Surface Water': 		surfaceWaterLayer.addTo(map),
+	    'OSM Reference Water': 	referenceWaterLayer,
+	    'OSM Marshes': 			referenceMarshesLayer,
+	    'Scene Outline': 		L.polyline(line_points, polyline_options).addTo(map)
+	}).addTo(map);	
+</script>
+
+</body>
+</html>
+
